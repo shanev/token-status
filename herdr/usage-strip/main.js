@@ -100,7 +100,7 @@ export default class UsageStrip extends View {
   renderStrip() {
     const t = theme();
     const data = shared(KEY);
-    const row = h_flex().id("usage-strip").size_full().px(14).gap(18).items_center()
+    const row = h_flex().id("usage-strip").size_full().px(14).gap(18).items_center().justify_end()
       .bg(t.chrome).border_t(1).border_color(t.border).text_size(11.8).text_color(t.muted)
       .hover((s) => s.bg(t.hover))
       .on_click(() => openOverlay({ mod: "usage-strip", props: { detail: true }, kind: "popup", width: 440, height: 360, at: "pointer" }));
@@ -108,6 +108,7 @@ export default class UsageStrip extends View {
       return row.child(this.error ? div().text_color(t.ansi1 ?? t.blocked).truncate().child(`usage: ${this.error}`)
                                   : div().child("usage: loading…"));
     }
+    if (data.error) row.child(div().text_color(t.ansi3 ?? t.working).tooltip(`Last refresh failed: ${data.error}`).id("stale").child("stale"));
     for (const key of Object.keys(NAMES)) {
       const p = data[key];
       if (!p) continue;
@@ -121,9 +122,7 @@ export default class UsageStrip extends View {
             .child(`${Math.round(l.percent)}%${l.pace?.hits_limit_at ? " ▲" : ""}`))));
       row.child(seg);
     }
-    return row.child(div().flex_1())
-      .when(Boolean(data.error), (el) => el.child(div().text_color(t.ansi3 ?? t.working).child("stale")))
-      .child(div().text_color(t.dim).child(this.loading ? "updating…" : clock(data.fetched_at)));
+    return row;
   }
 
   // ---------- the popup ----------

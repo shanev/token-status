@@ -102,6 +102,11 @@ Herdr's own layouts are read-only, so show the strip from a layout of your own:
 
 ```json
 { "type": "row", "id": "statusbar", "size": { "px": 28 }, "children": [
-  { "type": "block", "id": "status", "size": { "px": 300 }, "content": { "mod": "workspace-status" } },
-  { "type": "block", "id": "usage", "size": { "weight": 1 }, "content": { "mod": "usage-strip" } } ] }
+  { "type": "block", "id": "status", "size": { "weight": 1 }, "content": { "mod": "workspace-status" } },
+  { "type": "block", "id": "usage", "size": { "weight": 2 }, "content": { "mod": "usage-strip" } } ] }
 ```
+
+The strip right-aligns itself. To drop the status bar's command-palette hint,
+`herdr-app do mod.clone '{"name":"workspace-status","as":"workspace-status-lite"}'`,
+delete the last two `.child(...)` lines of its `render()` (the spacer and the
+hint), and point the `status` block at `workspace-status-lite`.
