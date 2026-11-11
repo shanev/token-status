@@ -80,10 +80,12 @@ token-status there.
 
 ### Herdr usage strip (mod)
 
-`herdr/usage-strip/` is a Herdr 2 mod that shows one line,
-`Claude 5h 44% · wk 69% ▲ · Fable 63% · Codex wk 6% · Grok wk 3%`, colored by
-pace (▲ = runs out before reset). It runs `token-status --json` every 5 minutes;
-clicking it opens the full panel beside the focused pane.
+`herdr/usage-strip/` is a Herdr 2 mod: a mini bar per limit
+(`Claude 5h ▬│ 45% · wk ▬│ 69% ▲ · Fable ▬│ 63% · Codex wk 6% · Grok wk 3%`),
+colored by pace, with the │ tick at the time elapsed in each window and ▲ when a
+limit will run out before it resets. Hover a limit for its reset and projection;
+click the strip for a details popup (Esc closes it) with Refresh and Open panel.
+It runs `token-status --json` every 5 minutes.
 
 ```sh
 cp -r herdr/usage-strip ~/.config/herdr-app/mods/
@@ -92,5 +94,14 @@ herdr-app check ~/.config/herdr-app/mods/usage-strip
 
 Set `MACHINE` at the top of `main.js` to the machine name (from `hc machine ls`)
 where token-status is installed, or leave it `null` for the machine running Herdr.
-Herdr's own layouts are read-only, so to show the strip, add a block with
-`{"mod": "usage-strip"}` to a layout of your own (`herdr-app do layout.clone '{"name":"main"}'`).
+
+Herdr's own layouts are read-only, so show the strip from a layout of your own:
+`herdr-app do layout.clone '{"name":"main","as":"main-usage"}'`, then in
+`~/.config/herdr-app/layouts/main-usage.json` replace the work column's
+`status` block with a row holding it and the strip:
+
+```json
+{ "type": "row", "id": "statusbar", "size": { "px": 28 }, "children": [
+  { "type": "block", "id": "status", "size": { "px": 300 }, "content": { "mod": "workspace-status" } },
+  { "type": "block", "id": "usage", "size": { "weight": 1 }, "content": { "mod": "usage-strip" } } ] }
+```
