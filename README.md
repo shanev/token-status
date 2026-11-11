@@ -4,18 +4,16 @@ Live plan-usage bars for **Claude Code**, **Codex** and **Grok Build** in a term
 
 ```
 Claude
-  5-hour session  ↻ 2h 18m (Wed 17:20)
-  ██████████░░░░░░░░░░░░░░░░░░░░  35.0%
+  5-hour session  ↻ 2h 6m (Wed 17:20)
+  ████████████░░░░░│░░░░░░░░░░░░  41.0%
+  on pace for ~71% by reset
   Weekly (all models)  ↻ 2d 4h (Fri 20:00)
-  ████████████████████░░░░░░░░░░  68.0%
-  Weekly (Fable)  ↻ 2d 4h (Fri 20:00)
-  ██████████████████░░░░░░░░░░░░  61.0%
+  ████████████████████│░░░░░░░░░  69.0%
+  ▲ at this pace, limit in 2d 3h (Fri 19:00)
 Codex
-  Weekly  ↻ 23h 40m (Thu 14:42)
-  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6.0%
-Grok
-  Weekly  ↻ 20h 35m (Thu 11:36)
-  █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3.0%
+  Weekly  ↻ 23h 28m (Thu 14:42)
+  ██░░░░░░░░░░░░░░░░░░░░░░░│░░░░   6.0%
+  on pace for ~7% by reset
 ```
 
 One Python 3 file, standard library only.
@@ -27,6 +25,21 @@ token-status            # all three, stacked
 token-status claude     # or codex / grok
 token-status all 120    # refresh every 120 s (default: 300 for all/claude, 120 for codex/grok)
 ```
+
+The `│` on each bar marks how much of that limit's window has passed: usage to
+its left is under budget. Below each bar is the projected use at reset, or, if
+you're on track to run out, when the limit will be hit at the current rate.
+
+For scripts and agents, `--json` prints once and exits:
+
+```sh
+token-status --json            # all providers
+token-status --json claude | jq '.claude.limits[] | {label, percent, pace}'
+```
+
+Each limit has `label`, `percent`, `resets_at`, `window_seconds` and
+`pace` (`elapsed_pct`, `projected_pct`, `hits_limit_at`); each provider has
+`note` and `error`.
 
 The script restarts itself when its file changes, so edits show up in running panes.
 
