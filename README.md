@@ -57,5 +57,10 @@ To bring it up beside the focused pane in [Herdr](https://herdr.dev) 2, bind a k
 `~/.config/herdr-app/keys.json`:
 
 ```json
-"cmd-shift-u": {"command": "pane.split", "args": {"direction": "right", "argv": ["token-status"]}}
+"cmd-shift-u": {"command": "pane.split", "args": {"direction": "right",
+  "argv": ["/bin/sh", "-c", "exec \"$HOME/.local/bin/token-status\""]}}
 ```
+
+Herdr starts the program without your shell's PATH, so the binding uses the
+install path. It runs on the machine of the focused pane, so install
+token-status there.
