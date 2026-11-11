@@ -80,6 +80,8 @@ token-status there.
 
 ### Herdr usage strip (mod)
 
+![The usage strip in Herdr's status bar](docs/usage-strip.png)
+
 `herdr/usage-strip/` is a Herdr 2 mod: a mini bar per limit
 (`Claude 5h ▬│ 45% · wk ▬│ 69% ▲ · Fable ▬│ 63% · Codex wk 6% · Grok wk 3%`),
 colored by pace, with the │ tick at the time elapsed in each window and ▲ when a
