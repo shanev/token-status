@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""token-status: live plan-usage bars for Claude, Codex and Grok in a terminal pane.
+
+Usage: token-status [claude|codex|grok|all] [interval_seconds]
+
+Reads each tool's own login on this machine:
+  claude  ~/.claude/.credentials.json  -> api.anthropic.com/api/oauth/usage (what Claude Code's /usage reads)
+  codex   `codex app-server`           -> account/rateLimits/read (what Codex's /status reads)
+  grok    ~/.grok/auth.json            -> cli-chat-proxy.grok.com/v1/billing (what Grok's /usage reads)
+None of these endpoints are documented public APIs; they can change without notice.
+"""
+import json, os, shutil, subprocess, sys, time, urllib.request
+from datetime import datetime, timezone
+
+HOME = os.path.expanduser("~")
+DEFAULT_INTERVAL = {"claude": 300, "codex": 120, "grok": 120, "all": 300}
+
+
+# ---------- rendering ----------
+
+def bar(pct, width=30):
+    pct = max(0.0, min(100.0, float(pct or 0)))
+    n = round(width * pct / 100)
+    color = "\033[32m" if pct < 60 else "\033[33m" if pct < 85 else "\033[31m"
+    return f"{color}{'█' * n}\033[90m{'░' * (width - n)}\033[0m {pct:5.1f}%"
+
+
+def until(ts):
+    """Time until a reset given as ISO string or epoch seconds."""
+    if ts is None:
+        return ""
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00")) if isinstance(ts, str) else datetime.fromtimestamp(ts, timezone.utc)
+    secs = int((dt - datetime.now(timezone.utc)).total_seconds())
+    if secs <= 0:
+        return "resetting"
+    d, r = divmod(secs, 86400); h, r = divmod(r, 3600); m = r // 60
+    rel = f"{d}d {h}h" if d else f"{h}h {m}m" if h else f"{m}m"
+    return f"↻ {rel} ({dt.astimezone().strftime('%a %H:%M')})"
+
+
+def get_json(url, headers, timeout=15):
+    req = urllib.request.Request(url, headers={"Accept": "application/json", **headers})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+# ---------- providers: each returns (rows, footer); a row is (label, percent, reset) ----------
+
+def claude():
+    creds = json.load(open(os.path.join(HOME, ".claude", ".credentials.json")))
+    tok = creds["claudeAiOauth"]["accessToken"]
+    d = get_json("https://api.anthropic.com/api/oauth/usage",
+                 {"Authorization": f"Bearer {tok}", "anthropic-beta": "oauth-2025-04-20"})
+    names = {"session": "5-hour session", "weekly_all": "Weekly (all models)", "weekly_scoped": "Weekly (scoped)"}
+    rows = []
+    for l in d.get("limits") or []:
+        label = names.get(l["kind"], l["kind"])
+        sc = l.get("scope")
+        name = ((sc.get("model") or {}).get("display_name") if isinstance(sc, dict) else sc) if sc else None
+        if name:
+            label = label.replace("(scoped)", f"({name})")
+        rows.append((label, l.get("percent"), l.get("resets_at")))
+    if not rows:  # older response shape
+        for k, label in (("five_hour", "5-hour session"), ("seven_day", "Weekly")):
+            if d.get(k):
+                rows.append((label, d[k]["utilization"], d[k]["resets_at"]))
+    extra = d.get("extra_usage") or {}
+    return rows, (f"Extra usage: {'on' if extra.get('is_enabled') else 'off'}" if extra else "")
+
+
+def codex():
+    exe = shutil.which("codex") or next((p for p in ("/opt/homebrew/bin/codex", "/usr/local/bin/codex") if os.path.exists(p)), None)
+    if not exe:
+        raise RuntimeError("codex not found")
+    msgs = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "token-status", "version": "1"}}},
+        {"jsonrpc": "2.0", "method": "initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read"},
+    ]
+    p = subprocess.Popen([exe, "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL, text=True)
+    p.stdin.write("".join(json.dumps(m) + "\n" for m in msgs)); p.stdin.flush()
+    result, deadline = None, time.time() + 30
+    try:
+        while time.time() < deadline:
+            line = p.stdout.readline()
+            if not line:
+                break
+            m = json.loads(line)
+            if m.get("id") == 2:
+                if "error" in m:
+                    raise RuntimeError(m["error"].get("message", m["error"]))
+                result = m["result"]; break
+    finally:
+        p.kill()
+    if result is None:
+        raise RuntimeError("no response from codex app-server")
+    rows = []
+    for lid, rl in (result.get("rateLimitsByLimitId") or {"codex": result["rateLimits"]}).items():
+        for slot in ("primary", "secondary"):
+            w = rl.get(slot)
+            if not w:
+                continue
+            mins = w.get("windowDurationMins") or 0
+            win = "Weekly" if mins == 10080 else "5-hour" if mins == 300 else f"{mins // 60}h"
+            name = rl.get("limitName") or ("" if lid == "codex" else lid)
+            rows.append((f"{win} {name}".strip(), w.get("usedPercent"), w.get("resetsAt")))
+    rl = result["rateLimits"]
+    resets = sum(1 for c in (result.get("rateLimitResetCredits") or {}).get("credits", []) if c.get("status") == "available")
+    return rows, f"Plan: {rl.get('planType')} · credits: {rl.get('credits', {}).get('balance')} · resets left: {resets}"
+
+
+GROK_HOME = os.environ.get("GROK_HOME", os.path.join(HOME, ".grok"))
+
+
+def _grok_token():
+    """auth.json maps '<issuer>::<client>' to OIDC sessions; use the one expiring last."""
+    best = None
+    for v in json.load(open(os.path.join(GROK_HOME, "auth.json"))).values():
+        if isinstance(v, dict) and v.get("key"):
+            exp = v.get("expires_at") or ""
+            if best is None or exp > best[1]:
+                best = (v["key"], exp)
+    if best is None:
+        raise RuntimeError("not signed in to grok")
+    exp = datetime.fromisoformat(best[1].replace("Z", "+00:00")) if best[1] else None
+    return best[0], exp
+
+
+def _grok_refresh():
+    """`grok models` signs in with the stored refresh token (no model call) and rewrites auth.json."""
+    exe = os.path.join(GROK_HOME, "bin", "grok")
+    exe = exe if os.path.exists(exe) else shutil.which("grok")
+    if exe:
+        subprocess.run([exe, "models"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=30)
+
+
+def grok():
+    tok, exp = _grok_token()
+    if exp and exp <= datetime.now(timezone.utc):
+        _grok_refresh(); tok, _ = _grok_token()
+    url = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+    try:
+        d = get_json(url, {"Authorization": f"Bearer {tok}"})
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+        _grok_refresh(); tok, _ = _grok_token()
+        d = get_json(url, {"Authorization": f"Bearer {tok}"})
+    cfg = d.get("config") or {}
+    period = cfg.get("currentPeriod") or {}
+    kind = {"USAGE_PERIOD_TYPE_WEEKLY": "Weekly", "USAGE_PERIOD_TYPE_MONTHLY": "Monthly"}.get(period.get("type"), "Usage")
+    rows = [(kind, cfg.get("creditUsagePercent") or 0, period.get("end"))]  # proto3 omits 0
+    split = " · ".join(f"{p['product'].replace('Grok', '')} {p.get('usagePercent', 0):g}%" for p in cfg.get("productUsage") or [])
+    return rows, (f"of which {split}" if split else "")
+
+
+PROVIDERS = {"claude": ("Claude", claude), "codex": ("Codex", codex), "grok": ("Grok", grok)}
+
+
+# ---------- loop ----------
+
+def section(which):
+    title, fetch = PROVIDERS[which]
+    try:
+        rows, foot = fetch(); err = None
+    except Exception as e:
+        rows, foot, err = [], "", str(e)
+    out = [f"\033[1m{title}\033[0m"]
+    for label, pct, reset in rows:
+        out += [f"  {label}  \033[90m{until(reset)}\033[0m", f"  {bar(pct)}"]
+    if foot:
+        out.append(f"  \033[90m{foot}\033[0m")
+    if err:
+        out.append(f"  \033[31merror: {err}\033[0m")
+    return out
+
+
+def main():
+    which = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if which not in (*PROVIDERS, "all"):
+        sys.exit(__doc__)
+    interval = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_INTERVAL[which]
+    mtime = os.path.getmtime(__file__)
+    while True:
+        out = [f"\033[1mUsage\033[0m  \033[90m{datetime.now().strftime('%H:%M:%S')} · every {interval}s\033[0m", ""]
+        for w in (PROVIDERS if which == "all" else [which]):
+            out += section(w) + [""]
+        sys.stdout.write("\033[H\033[2J" + "\n".join(out)); sys.stdout.flush()
+        end = time.time() + interval
+        while time.time() < end:
+            time.sleep(2)
+            if os.path.getmtime(__file__) != mtime:  # script edited: restart with the new code
+                os.execv(sys.executable, [sys.executable, __file__, *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
