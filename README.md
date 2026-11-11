@@ -77,3 +77,20 @@ To bring it up beside the focused pane in [Herdr](https://herdr.dev) 2, bind a k
 Herdr starts the program without your shell's PATH, so the binding uses the
 install path. It runs on the machine of the focused pane, so install
 token-status there.
+
+### Herdr usage strip (mod)
+
+`herdr/usage-strip/` is a Herdr 2 mod that shows one line,
+`Claude 5h 44% · wk 69% ▲ · Fable 63% · Codex wk 6% · Grok wk 3%`, colored by
+pace (▲ = runs out before reset). It runs `token-status --json` every 5 minutes;
+clicking it opens the full panel beside the focused pane.
+
+```sh
+cp -r herdr/usage-strip ~/.config/herdr-app/mods/
+herdr-app check ~/.config/herdr-app/mods/usage-strip
+```
+
+Set `MACHINE` at the top of `main.js` to the machine name (from `hc machine ls`)
+where token-status is installed, or leave it `null` for the machine running Herdr.
+Herdr's own layouts are read-only, so to show the strip, add a block with
+`{"mod": "usage-strip"}` to a layout of your own (`herdr-app do layout.clone '{"name":"main"}'`).
