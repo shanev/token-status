@@ -50,6 +50,30 @@ git clone https://github.com/shanev/token-status
 ln -s "$PWD/token-status/token-status" ~/.local/bin/token-status
 ```
 
+## Agent skill
+
+The optional [token-status skill](skills/token-status/SKILL.md) lets compatible
+agents answer questions such as "How much Codex usage do I have left?" and
+"Will I run out before reset?" using the CLI's live JSON output.
+
+Install Python 3 and the CLI as described above, and sign in to the providers
+you want to check using their own tools. Then install the skill:
+
+```sh
+npx skills add shanev/token-status --skill token-status
+```
+
+This command requires Node.js/npm and installs the agent instructions; the
+CLI itself remains Python-only. From a local checkout, use
+`npx skills add . --skill token-status`. Ask your agent to check plan usage;
+the skill reports remaining percentages, reset times, pace estimates, and
+provider errors. It does not report API billing or exact token counts.
+
+The repository uses the standard `skills/<name>/SKILL.md` layout discovered
+by the skills CLI. According to the [skills.sh FAQ](https://skills.sh/docs/faq),
+directory listings are driven by installation telemetry, so no separate
+submission is required after the skill is published on GitHub.
+
 ## Where the numbers come from
 
 Each provider is read with that tool's own login on this machine, from the
@@ -63,6 +87,13 @@ anywhere other than the provider's own server.
 | Grok | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` (Grok's `/usage`); an expired token is renewed with `grok models`, which makes no model call |
 
 None of these are documented public APIs, so they can change without notice.
+
+Codex discovery uses `PATH` first, then common per-user, npm, system, and
+Homebrew install directories on macOS and Linux. This also works when a GUI
+app starts token-status with a minimal `PATH`. For other install locations
+(including version-manager installs), set `CODEX_BIN` to the full executable
+path in the environment that launches token-status. `CODEX_BIN` takes
+precedence over automatic discovery.
 
 ## Herdr
 

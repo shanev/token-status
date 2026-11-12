@@ -82,10 +82,29 @@ def claude():
     return {"limits": out, "note": f"Extra usage: {'on' if extra.get('is_enabled') else 'off'}" if extra else ""}
 
 
+def find_codex():
+    """Respect PATH, with portable fallbacks for apps launched outside a shell."""
+    override = os.environ.get("CODEX_BIN")
+    if override:
+        exe = shutil.which(os.path.expanduser(override))
+        if not exe:
+            raise RuntimeError("CODEX_BIN does not point to an executable")
+        return exe
+    exe = shutil.which("codex")
+    if exe:
+        return exe
+    # User installs, npm's configured prefix, and system/Homebrew installs.
+    dirs = [os.path.join(HOME, p) for p in (".local/bin", "bin", ".npm-global/bin", ".npm/bin", ".cargo/bin")]
+    if os.environ.get("NPM_CONFIG_PREFIX"):
+        dirs.append(os.path.join(os.path.expanduser(os.environ["NPM_CONFIG_PREFIX"]), "bin"))
+    dirs.extend(("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/home/linuxbrew/.linuxbrew/bin"))
+    return shutil.which("codex", path=os.pathsep.join(dirs))
+
+
 def codex():
-    exe = shutil.which("codex") or next((p for p in ("/opt/homebrew/bin/codex", "/usr/local/bin/codex") if os.path.exists(p)), None)
+    exe = find_codex()
     if not exe:
-        raise RuntimeError("codex not found")
+        raise RuntimeError("codex not found; add it to PATH or set CODEX_BIN to its executable path")
     msgs = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "token-status", "version": "1"}}},
         {"jsonrpc": "2.0", "method": "initialized"},
