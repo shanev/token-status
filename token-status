@@ -30,6 +30,9 @@ def to_dt(ts):
     return datetime.fromtimestamp(ts, timezone.utc)
 
 
+URGENT_SECONDS = 24 * 3600  # flag a projected run-out within this (or 20% of the window)
+
+
 def limit(label, percent, resets_at, window_seconds):
     """One usage limit, with pace computed from how much of its window has passed."""
     pct = float(percent or 0)
@@ -40,13 +43,16 @@ def limit(label, percent, resets_at, window_seconds):
     if reset and window_seconds:
         left = max(0.0, (reset - now).total_seconds())
         elapsed = min(1.0, max(0.0, 1 - left / window_seconds))
-        pace = {"elapsed_pct": round(elapsed * 100, 1), "projected_pct": None, "hits_limit_at": None}
+        pace = {"elapsed_pct": round(elapsed * 100, 1), "projected_pct": None,
+                "hits_limit_at": None, "urgent": False}
         if elapsed >= 0.02:  # too early in the window to project anything meaningful
             pace["projected_pct"] = round(pct / elapsed, 1)
             used_s = elapsed * window_seconds
             if pct > 0 and pct < 100 and pct / elapsed > 100:
                 hit = now + timedelta(seconds=(100 - pct) * used_s / pct)
                 pace["hits_limit_at"] = hit.isoformat()
+                # Early projections are noisy; only flag a run-out that is close.
+                pace["urgent"] = (hit - now).total_seconds() <= min(URGENT_SECONDS, window_seconds * 0.2)
         d["pace"] = pace
     return d
 
@@ -232,8 +238,10 @@ def render(name, data):
         p = l["pace"] or {}
         out.append(f"  {l['label']}  {GRAY}↻ {when(reset) if reset else '?'}{RESET}")
         out.append(f"  {bar(l['percent'], p.get('elapsed_pct'))}")
-        if p.get("hits_limit_at"):
+        if p.get("urgent"):
             out.append(f"  \033[31m▲ at this pace, limit in {when(to_dt(p['hits_limit_at']))}{RESET}")
+        elif p.get("hits_limit_at"):
+            out.append(f"  \033[33mahead of pace: limit in {when(to_dt(p['hits_limit_at']))} if this rate holds{RESET}")
         elif p.get("projected_pct") is not None:
             tone = "\033[32m" if p["projected_pct"] <= 85 else "\033[33m"
             out.append(f"  {tone}on pace for ~{p['projected_pct']:.0f}% by reset{RESET}")

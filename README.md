@@ -28,7 +28,9 @@ token-status all 120    # refresh every 120 s (default: 300 for all/claude, 120 
 
 The `│` on each bar marks how much of that limit's window has passed: usage to
 its left is under budget. Below each bar is the projected use at reset, or, if
-you're on track to run out, when the limit will be hit at the current rate.
+you're on track to run out, when the limit will be hit at the current rate:
+amber while that is still far off, red with ▲ once it is within 24 hours (or
+20% of the window, for short windows).
 
 For scripts and agents, `--json` prints once and exits:
 
@@ -38,7 +40,7 @@ token-status --json claude | jq '.claude.limits[] | {label, percent, pace}'
 ```
 
 Each limit has `label`, `percent`, `resets_at`, `window_seconds` and
-`pace` (`elapsed_pct`, `projected_pct`, `hits_limit_at`); each provider has
+`pace` (`elapsed_pct`, `projected_pct`, `hits_limit_at`, `urgent`); each provider has
 `note` and `error`.
 
 The script restarts itself when its file changes, so edits show up in running panes.
@@ -115,8 +117,9 @@ token-status there.
 
 `herdr/usage-strip/` is a Herdr 2 mod: a mini bar per limit
 (`Claude 5h ▬│ 45% · wk ▬│ 69% ▲ · Fable ▬│ 63% · Codex wk 6% · Grok wk 3%`),
-colored by pace, with the │ tick at the time elapsed in each window and ▲ when a
-limit will run out before it resets. Hover a limit for its reset and projection;
+colored by pace, with the │ tick at the time elapsed in each window. A limit on
+track to run out before it resets turns amber, and red with ▲ once the run-out
+is within 24 hours (or 20% of a shorter window). Hover a limit for its reset and projection;
 click the strip for a details popup (Esc closes it) with Refresh and Open panel.
 It runs `token-status --json` every 5 minutes.
 

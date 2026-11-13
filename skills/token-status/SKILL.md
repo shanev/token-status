@@ -36,11 +36,13 @@ The top-level `fetched_at` is the observation time. Each provider contains
 - `percent`: percentage used; remaining allowance is `max(0, 100 - percent)` percent.
 - `resets_at`: ISO timestamp, or null when unknown.
 - `window_seconds`: duration of the limit window, or null.
-- `pace`: null or an object with `elapsed_pct`, `projected_pct`, and `hits_limit_at`.
+- `pace`: null or an object with `elapsed_pct`, `projected_pct`, `hits_limit_at`,
+  and `urgent` (true when `hits_limit_at` is within 24 hours or 20% of the window).
 
 Report usage and remaining allowance per relevant limit, plus reset times
 in the user's timezone when known (otherwise label the timestamp's timezone).
-If `hits_limit_at` is present, highlight the estimated exhaustion time.
+If `urgent` is true, highlight the estimated exhaustion time. If `hits_limit_at`
+is present but not urgent, mention it as ahead of pace without alarm.
 Otherwise use `projected_pct` to explain the estimated usage at reset.
 Pace assumes the average usage rate since the window began continues; it is
 an estimate, not a guaranteed deadline. Null pace or projection means there

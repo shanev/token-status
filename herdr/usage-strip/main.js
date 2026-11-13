@@ -37,7 +37,7 @@ function when(iso) {
 
 function tone(l, t) {
   const p = l.pace || {};
-  if (p.hits_limit_at || l.percent >= 95) return t.ansi1 ?? t.blocked;
+  if (p.urgent || l.percent >= 95) return t.ansi1 ?? t.blocked;
   if ((p.projected_pct ?? 0) > 85 || l.percent >= 85) return t.ansi3 ?? t.working;
   return t.ansi2 ?? t.done;
 }
@@ -46,7 +46,7 @@ function describe(l) {
   const p = l.pace || {};
   const parts = [`${l.label}: ${Math.round(l.percent)}% used`];
   if (l.resets_at) parts.push(`resets in ${when(l.resets_at)}`);
-  if (p.hits_limit_at) parts.push(`at this pace, runs out in ${when(p.hits_limit_at)}`);
+  if (p.hits_limit_at) parts.push(`${p.urgent ? "" : "if this rate holds, "}runs out in ${when(p.hits_limit_at)}`);
   else if (p.projected_pct != null) parts.push(`on pace for ~${Math.round(p.projected_pct)}% by reset`);
   return parts.join(" · ");
 }
@@ -118,8 +118,8 @@ export default class UsageStrip extends View {
         h_flex().id(`${key}-${i}`).gap(5).items_center().tooltip(describe(l))
           .child(div().text_color(t.dim).child(short(l.label)))
           .child(bar(l, t, 34, 5))
-          .child(div().text_color(l.pace?.hits_limit_at ? (t.ansi1 ?? t.blocked) : t.foreground)
-            .child(`${Math.round(l.percent)}%${l.pace?.hits_limit_at ? " ▲" : ""}`))));
+          .child(div().text_color(l.pace?.urgent ? (t.ansi1 ?? t.blocked) : l.pace?.hits_limit_at ? (t.ansi3 ?? t.working) : t.foreground)
+            .child(`${Math.round(l.percent)}%${l.pace?.urgent ? " ▲" : ""}`))));
       row.child(seg);
     }
     return row;
@@ -139,7 +139,8 @@ export default class UsageStrip extends View {
       if (p.error) sec.child(div().text_color(t.ansi1 ?? t.blocked).child(p.error));
       for (const l of p.limits) {
         const pc = l.pace || {};
-        const note = pc.hits_limit_at ? `▲ at this pace, runs out in ${when(pc.hits_limit_at)}`
+        const note = pc.urgent ? `▲ at this pace, runs out in ${when(pc.hits_limit_at)}`
+          : pc.hits_limit_at ? `ahead of pace: runs out in ${when(pc.hits_limit_at)} if this rate holds`
           : pc.projected_pct != null ? `on pace for ~${Math.round(pc.projected_pct)}% by reset` : "";
         sec.child(v_flex().gap(3)
           .child(h_flex().gap(8).items_center()
@@ -148,7 +149,7 @@ export default class UsageStrip extends View {
             .child(div().w(40).text_color(tone(l, t)).child(`${Math.round(l.percent)}%`)))
           .child(h_flex().gap(8).text_size(11.5)
             .child(div().w(130).text_color(t.dim).child(l.resets_at ? `↻ ${when(l.resets_at)}` : ""))
-            .child(div().text_color(pc.hits_limit_at ? (t.ansi1 ?? t.blocked) : t.muted).child(note))));
+            .child(div().text_color(pc.urgent ? (t.ansi1 ?? t.blocked) : pc.hits_limit_at ? (t.ansi3 ?? t.working) : t.muted).child(note))));
       }
       if (p.note) sec.child(div().text_size(11.5).text_color(t.dim).child(p.note));
       box.child(sec);
